@@ -4,6 +4,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from oneDay_oneProblem.celery import app
 from celery import group
+from datetime import timedelta
+from django.utils import timezone
 
 from .models import problem, problem_solved_user
 from users.models import user
@@ -144,8 +146,26 @@ def get_solved_problems(baekjoon_id: str) -> list[int]:
 
 
     return list(solved_problems)
-    
 
+def get_latest_solved_problems(baekjoon_id: str, num: int) -> list[int]:
+    """
+    Retrieve the latest solved problems for a specific user.
+    """
+    userObject = user.objects.filter(baekjoon_id=baekjoon_id).first()
+    if not userObject:
+        print(f"User with baekjoon_id {baekjoon_id} not found.")
+        return None
+
+    solved_problems = problem_solved_user.objects\
+    .filter(userId=userObject._id, created_at__gt=timezone.now() - timedelta(days=30))\
+    .order_by('-created_at')\
+    .values_list('problemId', flat=True)[:num]
+
+    if not solved_problems:
+        print(f"No solved problems found for user {baekjoon_id}.")
+        return []
+
+    return list(solved_problems)
 
 @api_view(['GET'])
 def solved_problems_update(request, username: str) -> Response:
@@ -185,6 +205,29 @@ def solved_problems(request, username: str) -> Response:
     solved_problems = get_solved_problems(userObject.baekjoon_id)
     if not solved_problems:
         return Response({"error": "Failed to retrieve solved problems"}, status=500)
+
+    return Response({
+        "baekjoon_id": userObject.baekjoon_id,
+        "username": userObject.name,
+        "solved_count": len(solved_problems),
+        "solved_problems": solved_problems
+    }, status=200)
+
+@api_view(['GET'])
+def latest_solved_problems(request, username: str) -> Response:
+    """
+    Retrieve the latest solved problems for a specific user.
+    """
+    if not username:
+        return Response({"error": "Username is required"}, status=400)
+
+    userObject = user.objects.filter(name=username).first()
+    if not userObject:
+        return Response({"error": "User not found"}, status=404)
+
+    solved_problems = get_latest_solved_problems(userObject.baekjoon_id, 10)
+    if not solved_problems:
+        return Response({"error": "Failed to retrieve latest solved problems"}, status=500)
 
     return Response({
         "baekjoon_id": userObject.baekjoon_id,
