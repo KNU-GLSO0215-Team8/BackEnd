@@ -167,8 +167,75 @@ def get_latest_solved_problems(baekjoon_id: str, num: int) -> list[int]:
 
     return list(solved_problems)
 
+# 추천
+def recommend_problems(baekjoon_id: str, num: int = 10) -> list[int]:
+    """
+    Recommend problems for a specific user based on their solved problems.
+    """
+    userObject = user.objects.filter(baekjoon_id=baekjoon_id).first()
+    if not userObject:
+        print(f"User with baekjoon_id {baekjoon_id} not found.")
+        return None
+
+    tags = dict({
+        "math": 0,
+        "implementation": 0,
+        "greedy": 0,
+        "data_structures": 0,
+        "graphs": 0,
+        "dp": 0,
+        "geometry": 0,
+        "string": 0
+    })
+    
+    for tag in tags.keys():
+        url = f"{solved_ac}/search/problem?query=tag:{tag}+s@{userObject.baekjoon_id}&sort=level&direction=desc&page=1"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            i = 0
+            for item in data['items']:
+                if i >= 50:
+                    break
+                tags[tag] += item['level']
+                i += 1
+
+    tags = list(zip(tags.keys(), tags.values()))
+    tags.sort(key=lambda x: x[1])
+    toplevel = tags[-1][1]/50+2 if tags[-1][1] > 3 else 5
+    bottomlevel = tags[0][1]/50-2 if tags[0][1] < 3 else 1
+
+    #(tag:math+|+tag:implementation)+*s2..s1+-s@daniel040607+s%2310000..&sort=solved&direction=desc&page=1
+    tag_query = "("+"+ | +".join([f"tag:{tag[0]}" for tag in tags[:3]])+")"
+    level_query = f"*{bottomlevel}..{toplevel}"
+    query = f"{tag_query}+{level_query}+ -s@{baekjoon_id}+s%231000.."
+    url = f"{solved_ac}/search/problem?query={query}&sort=solved&direction=desc&page=1"
+    print(url)
+
+
+
+    response = requests.get(url)
+    if response.status_code != 200:
+        print(f"Failed to fetch recommended problems for user {baekjoon_id}: {response.status_code}")
+        return None
+    data = response.json()
+    items = data.get('items', [])
+    if not items:
+        print(f"No recommended problems found for user {baekjoon_id}.")
+        return []
+    
+    problem_ids = [item['problemId'] for item in items[:num]]
+    if not problem_ids:
+        print(f"No recommended problems found for user {baekjoon_id}.")
+        return []
+   
+    return problem_ids
+
+
+
+
 @api_view(['GET'])
-def solved_problems_update(request, username: str) -> Response:
+def solved_problems_update_view(request, username: str) -> Response:
     """
     Retrieve the list of solved problems for a specific user.
     """
@@ -191,7 +258,7 @@ def solved_problems_update(request, username: str) -> Response:
     }, status=200)
 
 @api_view(['GET'])
-def solved_problems(request, username: str) -> Response:
+def solved_problems_view(request, username: str) -> Response:
     """
     Retrieve the list of solved problems for a specific user.
     """
@@ -214,7 +281,7 @@ def solved_problems(request, username: str) -> Response:
     }, status=200)
 
 @api_view(['GET'])
-def latest_solved_problems(request, username: str) -> Response:
+def latest_solved_problems_view(request, username: str) -> Response:
     """
     Retrieve the latest solved problems for a specific user.
     """
@@ -234,4 +301,26 @@ def latest_solved_problems(request, username: str) -> Response:
         "username": userObject.name,
         "solved_count": len(solved_problems),
         "solved_problems": solved_problems
+    }, status=200)
+
+@api_view(['GET'])
+def recommend_problems_view(request, username: str) -> Response:
+    """
+    Recommend problems for a specific user based on their solved problems.
+    """
+    if not username:
+        return Response({"error": "Username is required"}, status=400)
+
+    userObject = user.objects.filter(name=username).first()
+    if not userObject:
+        return Response({"error": "User not found"}, status=404)
+
+    recommended_problems = recommend_problems(userObject.baekjoon_id)
+    if not recommended_problems:
+        return Response({"error": "Failed to retrieve recommended problems"}, status=500)
+
+    return Response({
+        "baekjoon_id": userObject.baekjoon_id,
+        "username": userObject.name,
+        "recommended_problems": recommended_problems
     }, status=200)
