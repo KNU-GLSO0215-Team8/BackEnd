@@ -1,0 +1,5 @@
+
+requirements:
+- python
+- redis
+- mysql

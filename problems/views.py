@@ -129,8 +129,26 @@ def update_solved_problem(baekjoon_id: str) -> list[int] | None:
 
     return list_problem_id
 
+def get_solved_problems(baekjoon_id: str) -> list[int]:
+    
+    userObject = user.objects.filter(baekjoon_id=baekjoon_id).first()
+    if not userObject:
+        print(f"User with baekjoon_id {baekjoon_id} not found.")
+        return None
+    
+    solved_problems = problem_solved_user.objects.filter(userId=userObject._id).values_list('problemId', flat=True)
+
+    if not solved_problems:
+        print(f"No solved problems found for user {baekjoon_id}.")
+        return []
+
+
+    return list(solved_problems)
+    
+
+
 @api_view(['GET'])
-def solved_problems(request, username: str) -> Response:
+def solved_problems_update(request, username: str) -> Response:
     """
     Retrieve the list of solved problems for a specific user.
     """
@@ -144,6 +162,29 @@ def solved_problems(request, username: str) -> Response:
     solved_problems = update_solved_problem(userObject.baekjoon_id)
     if not solved_problems:
         return Response({"error": "Failed to update solved problems"}, status=500)
+
+    return Response({
+        "baekjoon_id": userObject.baekjoon_id,
+        "username": userObject.name,
+        "solved_count": len(solved_problems),
+        "solved_problems": solved_problems
+    }, status=200)
+
+@api_view(['GET'])
+def solved_problems(request, username: str) -> Response:
+    """
+    Retrieve the list of solved problems for a specific user.
+    """
+    if not username:
+        return Response({"error": "Username is required"}, status=400)
+
+    userObject = user.objects.filter(name=username).first()
+    if not userObject:
+        return Response({"error": "User not found"}, status=404)
+
+    solved_problems = get_solved_problems(userObject.baekjoon_id)
+    if not solved_problems:
+        return Response({"error": "Failed to retrieve solved problems"}, status=500)
 
     return Response({
         "baekjoon_id": userObject.baekjoon_id,
