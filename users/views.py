@@ -4,10 +4,14 @@ from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework.decorators import api_view
 import hashlib
+import jwt
+import datetime
 
 from .models import user
 
 solved_ac = "https://solved.ac/api/v3"
+JWT_SECRET = "비밀키"
+JWT_ALGORITHM = "HS256"
 
 def get_baekjoon_user_info(baekjoon_id: str) -> dict | bool:
     url = f"{solved_ac}/user/show?handle={baekjoon_id}"
@@ -51,7 +55,7 @@ def register_user(username: str, password: str, baekjoon_id: str) -> tuple[bool,
 
     return (True, "User registered successfully")
 
-def login_user(username: str, password: str) -> tuple[bool, str]:
+def login_user(username: str, password: str) -> tuple[bool, str | dict]:
     if len(username) < 2 or len(username) > 32:
         return (False, "Username len short or long")
     if len(password) < 2 or len(password) > 32:
@@ -64,8 +68,15 @@ def login_user(username: str, password: str) -> tuple[bool, str]:
 
     if hashlib.sha256(password.encode()).hexdigest() != user_obj.password:
         return (False, "Incorrect password")
+    payload = {
+        "user_id": user_obj.id,
+        "username": username,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    }
 
-    return (True, "Login successful")
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+    return (True, {"message": "Login successful", "token": token})
 
 def delete_user(username: str, password: str) -> tuple[bool, str]:
     if len(username) < 2 or len(username) > 32:
